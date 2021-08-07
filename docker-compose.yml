@@ -1,0 +1,84 @@
+version: '2'
+services:
+  nginx:
+    image: myapp/myapp-website-nginx:latest-dockerhub
+    stdin_open: true
+    volumes:
+    - /data/myapp/var/www/myapp:/var/www/myapp:rw
+    - /data/myapp/var/docker/myapp/website/log/nginx:/var/log/nginx:rw
+    - /data/myapp/nginx/httptest.myapp.conf:/etc/nginx/conf.d/myapp.conf:ro
+    tty: true
+    links:
+    - php-fpm:php
+    labels:
+      io.rancher.container.pull_image: always
+  mysql-backup-util:
+    image: mysql-backup-util
+    environment:
+      backup_folder: /backups
+      backup_type: full
+      db_host: mysql
+      db_name: myapp
+      db_password: root
+      db_user: root
+      s3_bucket_folder: '/myappdbbak'           ### must have leading /
+      s3_access_key: ${S3KEY}
+      s3_access_secret: ${S3SECRET}   
+      s3_endpoint: 'nyc3.digitaloceanspaces.com' # s3cfg host_base - nyc3.digitaloceanspaces.com
+      s3_bucket: ${S3BUCKET} ### s3cfg host_bucket
+      s3_bucket_location: US # example: US
+    stdin_open: true
+    volumes:
+    - mysql_backups:/backups
+    links:
+    - mysql:mysql
+    labels:
+      cron.schedule: 0 * * * * *
+  mysql:
+    image: myapp/myapp-website-mysql:deployed_myapp
+    environment:
+      MYSQL_DATABASE: myapp
+      MYSQL_PASSWORD: myapp
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_USER: myapp
+    volumes:
+    - /data/myapp/var/docker/myapp/website/mysql54/data:/var/lib/mysql
+    labels:
+      io.rancher.container.pull_image: always
+  php-fpm:
+    image: myapp/myapp-website-phpfpm:latest-dockerhub
+    environment:
+      APP_CONF_DB_HOST: mysql
+      APP_CONF_DB_NAME: myapp
+      APP_CONF_DB_PASSWORD: myapp
+      APP_CONF_DB_TYPE: mysql
+      APP_CONF_DB_USERNAME: myapp
+    volumes:
+    - /data/myapp/var/www/myapp:/var/www/myapp:rw
+    links:
+    - mysql:mysql
+    - redis:redis
+    labels:
+      io.rancher.container.pull_image: always
+  redis:
+    image: redis
+    labels:
+      io.rancher.container.pull_image: always
+  deploy:
+    image: myapp/myapp-website-deploy:latest-dockerhub
+    environment:
+      APP_CONF_DB_HOST: mysql
+      APP_CONF_DB_NAME: myapp
+      APP_CONF_DB_PASSWORD: myapp
+      APP_CONF_DB_USERNAME: myapp
+      REDIS_HOST: redis
+      VCS_BRANCH: develop
+    volumes:
+    - /data/myapp/var/www/myapp:/var/www/myapp:rw
+    - /data/myapp/var/docker/myapp/website/ssh:/root/.ssh:rw
+    links:
+    - mysql:mysql
+    - redis:redis
+    labels:
+      io.rancher.container.pull_image: always
+
